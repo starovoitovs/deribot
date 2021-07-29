@@ -45,7 +45,7 @@ def split_x(df, offset=1, window_size=100, depth=10):
     X1 = X1[:, :, :, np.newaxis]
 
     # X2
-    timestamp_diff = df[['timestamp']].diff(1) / 1000.
+    timestamp_diff = df[['timestamp']].diff(1).fillna(0) / 1000.
     X2 = timestamp_diff.to_numpy()[I]
 
     return X1, X2
