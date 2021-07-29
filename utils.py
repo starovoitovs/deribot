@@ -41,13 +41,6 @@ def split_x(df, offset=1, window_size=100, depth=10):
     pmask = [x for x in np.arange(4 * depth) if x % 4 < 2]
     X1[:, :, pmask] -= mid_price[:, np.newaxis, np.newaxis]
 
-    # rescale volumes
-    l = 10.
-    u = 1000000.
-
-    vmask = [x for x in np.arange(4 * depth) if x % 4 >= 2]
-    X1[:, :, vmask] = (X1[:, :, vmask] - l) / (u - l)
-
     # add axis
     X1 = X1[:, :, :, np.newaxis]
 
