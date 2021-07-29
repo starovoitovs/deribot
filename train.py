@@ -67,8 +67,8 @@ assert df.index.is_unique
 # In[28]:
 
 
-df = prepare_df1(df)
-df = prepare_df2(df, k=KERNEL_SIZE)
+df = prepare_features(df)
+df = prepare_labels(df, kernel_size=KERNEL_SIZE)
 
 
 # In[16]:

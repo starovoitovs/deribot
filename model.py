@@ -7,9 +7,9 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 
-def build_model(window_size, n_features):
+def build_model(window_size, n_features, depth):
 
-    input_layer1 = Input(shape=(window_size, 40, 1))
+    input_layer1 = Input(shape=(window_size, depth * 4, 1))
     input_layer2 = Input(shape=(window_size, n_features))
 
     x = Conv2D(16, kernel_size=(1, 2), strides=(1, 2), activation='relu')(input_layer1)
@@ -20,7 +20,7 @@ def build_model(window_size, n_features):
     x = Conv2D(16, kernel_size=(4, 1), activation='relu', padding='same')(x)
     x = Conv2D(16, kernel_size=(4, 1), activation='relu', padding='same')(x)
     
-    x = Conv2D(16, kernel_size=(1, 10), activation='relu')(x)
+    x = Conv2D(16, kernel_size=(1, depth), activation='relu')(x)
     x = Conv2D(16, kernel_size=(4, 1), activation='relu', padding='same')(x)
     x = Conv2D(16, kernel_size=(4, 1), activation='relu', padding='same')(x)
 
