@@ -1,18 +1,17 @@
 import numpy as np
-import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 
 def get_keys(depth):
 
-    apcs = [f'ap_{i}' for i in range(depth)]
-    avcs = [f'av_{i}' for i in range(depth)]
     bpcs = [f'bp_{i}' for i in range(depth)]
+    apcs = [f'ap_{i}' for i in range(depth)]
     bvcs = [f'bv_{i}' for i in range(depth)]
+    avcs = [f'av_{i}' for i in range(depth)]
 
     keys = [x for items in zip(apcs, bpcs, avcs, bvcs) for x in items]
 
-    return keys, apcs, avcs, bpcs, bvcs
+    return keys, bpcs, apcs, bvcs, avcs
 
 
 def add_pcolor_to_plot(ax, data):
@@ -26,7 +25,7 @@ def add_pcolor_to_plot(ax, data):
     ax.pcolor(X, Y, data.to_numpy().reshape(1, -1), cmap='coolwarm', alpha=1., vmin=-1., vmax=1.)
 
 
-def splitX(df, features, offset=1, window_size=100, depth=10):
+def split_x(df, offset=1, window_size=100, depth=10):
 
     keys = get_keys(depth)[0]
 
@@ -38,16 +37,28 @@ def splitX(df, features, offset=1, window_size=100, depth=10):
     bid, ask = X1[:, -1, [0, 1]].T
     mid_price = (bid + ask) / 2
 
-    X1[:, :, [x for x in np.arange(40) if x % 4 < 2]] -= mid_price[:, np.newaxis, np.newaxis]
+    # shift prices
+    pmask = [x for x in np.arange(4 * depth) if x % 4 < 2]
+    X1[:, :, pmask] -= mid_price[:, np.newaxis, np.newaxis]
+
+    # rescale volumes
+    l = 10.
+    u = 1000000.
+
+    vmask = [x for x in np.arange(4 * depth) if x % 4 >= 2]
+    X1[:, :, vmask] = (X1[:, :, vmask] - l) / (u - l)
+
+    # add axis
     X1 = X1[:, :, :, np.newaxis]
 
     # X2
-    X2 = df[features].to_numpy()[I]
+    timestamp_diff = df[['timestamp']].diff(1) / 1000.
+    X2 = timestamp_diff.to_numpy()[I]
 
     return X1, X2
 
 
-def splitY(df, offset=1, window_size=100, label_threshold=5e-5):
+def split_y(df, offset=1, window_size=100, label_threshold=5e-5):
 
     y = df.iloc[offset - 1 + window_size:len(df):offset]['y2'].to_numpy()
     y = -1 + 1. * (y >= -label_threshold) + 1. * (y >= label_threshold)
@@ -61,41 +72,23 @@ def splitY(df, offset=1, window_size=100, label_threshold=5e-5):
 
 def prepare_features(df, depth=10):
 
-    keys, apcs, avcs, bpcs, bvcs = get_keys(depth)
+    # express volumes in the units of contracts (originally in USD)
+    keys, bpcs, apcs, bvcs, avcs = get_keys(depth)
+    df.loc[:, avcs + bvcs] = df.loc[:, avcs + bvcs].div(df['index_price'], axis=0)
 
-    # diff time and asset price with lag=1 to remove trend
-    columns = {
-        'timestamp': 'timestamp_diff',
-    }
-    
-    df0 = df[['timestamp']].diff(1).rename(columns=columns)
-    df0['timestamp_diff'] /= 1000.
+    return df
 
-    df1 = df[keys]
-    retval_df = pd.concat([df1, df0], axis=1)
 
-    # remove nans
-    retval_df = retval_df[~retval_df.isna().any(axis=1)]
-
-    # rescale volumes
-    l = 10.
-    u = 1000000.
-    retval_df[avcs + bvcs] = (retval_df[avcs + bvcs] - l) / (u - l)
-
-    # midprice
-    retval_df['mid_price'] = (retval_df['bp_0'] + retval_df['ap_0']) / 2
-
-    return retval_df
-
-    
 def prepare_labels(df, kernel_size):
     
     retval_df = df.copy()
 
+    mid_price = (retval_df['ap_0'] + retval_df['bp_0']) / 2
+
     # https://arxiv.org/pdf/1808.03668.pdf, p. 4
-    retval_df['m+'] = retval_df['mid_price'].shift(-(kernel_size - 1)).rolling(kernel_size).mean()
-    retval_df['m-'] = retval_df['mid_price'].rolling(kernel_size).mean()
-    retval_df['y1'] = (retval_df['m+'] - retval_df['mid_price']) / retval_df['mid_price']
+    retval_df['m+'] = mid_price.shift(-(kernel_size - 1)).rolling(kernel_size).mean()
+    retval_df['m-'] = mid_price.rolling(kernel_size).mean()
+    retval_df['y1'] = (retval_df['m+'] - mid_price) / mid_price
     retval_df['y2'] = (retval_df['m+'] - retval_df['m-']) / retval_df['m-']
 
     retval_df = retval_df.iloc[kernel_size - 1:-(kernel_size - 1)]
