@@ -38,14 +38,14 @@ def calculate_execution_price(df, strategy_diff, depth=10):
     execution_price = pd.Series(0, index=df.index, dtype=np.float64)
 
     # execution price is calculate from either bids or asks based on the sign of the position
-    for factor, mask, pcs, vcs in [(+1, strategy_diff < 0, apcs, avcs), (-1, strategy_diff > 0, bpcs, bvcs)]:
+    for factor, mask, pcs, vcs in [(-1, strategy_diff < 0, apcs, avcs), (+1, strategy_diff > 0, bpcs, bvcs)]:
 
         weights = np.minimum(df.loc[mask, vcs].cumsum(axis=1), factor * strategy_diff.loc[mask][:, np.newaxis])
 
         # ensure that lob has enough depth
         if not np.all(weights[weights.columns[-1]] == factor * strategy_diff.loc[mask]):
             idx = np.argmin(weights[weights.columns[-1]] == factor * strategy_diff.loc[mask])
-            msg = f"Not enough depth in the order buy to buy {strategy_diff[idx]} shares at timestep {idx}"
+            msg = f"Not enough depth in the order buy to buy {strategy_diff[idx]} shares at timestep {weights.index[idx]}"
             raise ValueError(msg)
 
         # if depth is sufficient, calculate average execution price
@@ -56,7 +56,7 @@ def calculate_execution_price(df, strategy_diff, depth=10):
     return execution_price
 
 
-def create_strategy(df, model, depth=10, window_size=100, gamma=20, com=10):
+def create_strategy(df, model, position_size=1., depth=10, window_size=100, gamma=20, com=10):
 
     # predict returns
     X1, X2 = split_x(df, offset=1, window_size=window_size, depth=depth)
@@ -77,6 +77,7 @@ def create_strategy(df, model, depth=10, window_size=100, gamma=20, com=10):
     # avoid holding zero on neutral signal, hold -1 or 1 instead continuously until opposite signal prevails
     retval_df[strategy_name] = retval_df[strategy_name].replace(to_replace=0, method='ffill')
     retval_df[strategy_name].iloc[0] = 0
+    retval_df[strategy_name] *= position_size
 
     retval_df.loc[:, ['money', 'pnl', 'fees']] = integrate(df, retval_df[strategy_name])
     retval_df['n_trades'] = np.cumsum(retval_df[strategy_name].diff(1).fillna(0) != 0)

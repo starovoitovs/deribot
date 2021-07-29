@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import re
 from sklearn.preprocessing import OneHotEncoder
 
 
@@ -34,10 +36,9 @@ def split_x(df, offset=1, window_size=100, depth=10):
     # X1
     X1 = df[keys].to_numpy()[I]
 
+    # shift prices
     bid, ask = X1[:, -1, [0, 1]].T
     mid_price = (bid + ask) / 2
-
-    # shift prices
     pmask = [x for x in np.arange(4 * depth) if x % 4 < 2]
     X1[:, :, pmask] -= mid_price[:, np.newaxis, np.newaxis]
 
@@ -47,6 +48,8 @@ def split_x(df, offset=1, window_size=100, depth=10):
     # X2
     timestamp_diff = df[['timestamp']].diff(1).fillna(0) / 1000.
     X2 = timestamp_diff.to_numpy()[I]
+
+    assert not np.any(np.isnan(X1)) and not np.any(np.isnan(X2))
 
     return X1, X2
 
@@ -68,6 +71,13 @@ def prepare_features(df, depth=10):
     # express volumes in the units of contracts (originally in USD)
     keys, bpcs, apcs, bvcs, avcs = get_keys(depth)
     df.loc[:, avcs + bvcs] = df.loc[:, avcs + bvcs].div(df['index_price'], axis=0)
+
+    # drop redundant depth columns
+    df = df.drop([x for x in df.columns if re.match('[ab][pv]_', x) and x not in keys], axis=1)
+
+    # set index
+    df.index = pd.to_datetime(df['timestamp'] * 1000 * 1000)
+    assert df.index.is_unique
 
     return df
 
